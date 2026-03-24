@@ -1,11 +1,15 @@
 const WebSocket = require("ws")
 const axios = require("axios")
+const express = require("express")
+const path = require("path")
 
+// ---- CONFIG ----
+let leaderUrl = "http://localhost:5001"
+
+// ---- WEBSOCKET SERVER ----
 const wss = new WebSocket.Server({ port: 3000 })
 
 let clients = []
-
-let leaderUrl = "http://localhost:5001"
 
 wss.on("connection", (ws) => {
   console.log("Client connected")
@@ -13,6 +17,7 @@ wss.on("connection", (ws) => {
 
   ws.on("message", async (message) => {
     console.log("Gateway received:", message.toString())
+
     const data = JSON.parse(message)
 
     try {
@@ -27,16 +32,23 @@ wss.on("connection", (ws) => {
   })
 })
 
-console.log("Gateway running on ws://localhost:3000")
-// HTTP server for replicas to send committed strokes
-const express = require("express")
+console.log("WebSocket Gateway running on ws://localhost:3000")
+
+// ---- HTTP SERVER ----
 const app = express()
 app.use(express.json())
 
+// 🔥 SERVE FRONTEND (THIS WAS MISSING)
+app.use(express.static(path.join(__dirname, "../../frontend")))
+
+// ---- BROADCAST ENDPOINT ----
 app.post("/broadcast", (req, res) => {
   const data = req.body
 
-  console.log("📡 Broadcasting:", data)
+  console.log("Broadcasting:", data)
+
+  // remove dead clients
+  clients = clients.filter(client => client.readyState === WebSocket.OPEN)
 
   clients.forEach(client => {
     client.send(JSON.stringify(data))
@@ -45,6 +57,7 @@ app.post("/broadcast", (req, res) => {
   res.sendStatus(200)
 })
 
+// ---- START SERVER ----
 app.listen(4000, () => {
-  console.log("Gateway HTTP running on http://localhost:4000")
+  console.log("HTTP Gateway running on http://localhost:4000")
 })

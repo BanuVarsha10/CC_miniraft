@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Distributed Drawing Board</title>
+
+    <style>
+    body {
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: linear-gradient(to right, #dbeafe, #bfdbfe);
+        text-align: center;
+    }
+
+    h1 {
+        margin: 15px;
+        color: #1e3a8a;
+    }
+
+    .toolbar {
+        background: #ffffff;
+        padding: 12px;
+        margin: 0 auto;
+        width: fit-content;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+
+    canvas {
+        border: 3px solid #1e40af;
+        margin-top: 20px;
+        background: #ffffff;
+        cursor: crosshair;
+        border-radius: 8px;
+    }
+
+    input[type="color"] {
+        border: none;
+        width: 40px;
+        height: 30px;
+        cursor: pointer;
+    }
+
+    input[type="range"] {
+        accent-color: #2563eb;
+    }
+
+    button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+
+    button:hover {
+        background: #1e40af;
+    }
+    </style>
+</head>
+
+<body>
+
+<h1>Distributed Drawing Board</h1>
+
+<div class="toolbar">
+  Color:
+  <input type="color" id="colorPicker" value="#000000">
+
+  Brush:
+  <input type="range" id="brushSize" min="1" max="10" value="2">
+
+  <button onclick="clearCanvas()">Clear</button>
+</div>
+
+<canvas id="board" width="900" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById("board")
+const ctx = canvas.getContext("2d")
+
+const ws = new WebSocket("ws://localhost:3000")
+
+let drawing = false
+let lastX = 0
+let lastY = 0
+
+let color = "#000000"
+let size = 2
+
+// UI controls
+document.getElementById("colorPicker").onchange = (e) => {
+  color = e.target.value
+}
+
+document.getElementById("brushSize").oninput = (e) => {
+  size = e.target.value
+}
+
+// draw line
+function drawLine(x1, y1, x2, y2, color, size) {
+  ctx.strokeStyle = color
+  ctx.lineWidth = size
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+}
+
+canvas.addEventListener("mousedown", (e) => {
+  drawing = true
+  const rect = canvas.getBoundingClientRect()
+  lastX = e.clientX - rect.left
+  lastY = e.clientY - rect.top
+})
+
+canvas.addEventListener("mouseup", () => drawing = false)
+canvas.addEventListener("mouseleave", () => drawing = false)
+
+canvas.addEventListener("mousemove", (e) => {
+  if (!drawing) return
+
+  const rect = canvas.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+
+  // draw locally
+  drawLine(lastX, lastY, x, y, color, size)
+
+  // send to backend
+  ws.send(JSON.stringify({
+    x1: lastX,
+    y1: lastY,
+    x2: x,
+    y2: y,
+    color,
+    size
+  }))
+
+  lastX = x
+  lastY = y
+})
+
+// receive from backend
+ws.onmessage = (event) => {
+  const { x1, y1, x2, y2, color, size } = JSON.parse(event.data)
+  drawLine(x1, y1, x2, y2, color, size)
+}
+
+// clear canvas (local only for now)
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+}
+</script>
+
+</body>
+</html>
