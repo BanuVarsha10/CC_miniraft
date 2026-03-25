@@ -3,64 +3,64 @@
 <head>
   <title>Distributed Drawing Board</title>
 
-    <style>
+  <style>
     body {
-        margin: 0;
-        font-family: "Segoe UI", sans-serif;
-        background: linear-gradient(to right, #dbeafe, #bfdbfe);
-        text-align: center;
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(to right, #dbeafe, #bfdbfe);
+      text-align: center;
     }
 
     h1 {
-        margin: 15px;
-        color: #1e3a8a;
+      margin: 15px;
+      color: #1e3a8a;
     }
 
     .toolbar {
-        background: #ffffff;
-        padding: 12px;
-        margin: 0 auto;
-        width: fit-content;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        display: flex;
-        gap: 15px;
-        align-items: center;
+      background: #ffffff;
+      padding: 12px;
+      margin: 0 auto;
+      width: fit-content;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 15px;
+      align-items: center;
     }
 
     canvas {
-        border: 3px solid #1e40af;
-        margin-top: 20px;
-        background: #ffffff;
-        cursor: crosshair;
-        border-radius: 8px;
+      border: 3px solid #1e40af;
+      margin-top: 20px;
+      background: #ffffff;
+      cursor: crosshair;
+      border-radius: 8px;
     }
 
     input[type="color"] {
-        border: none;
-        width: 40px;
-        height: 30px;
-        cursor: pointer;
+      border: none;
+      width: 40px;
+      height: 30px;
+      cursor: pointer;
     }
 
     input[type="range"] {
-        accent-color: #2563eb;
+      accent-color: #2563eb;
     }
 
     button {
-        background: #2563eb;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: 0.2s;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s;
     }
 
     button:hover {
-        background: #1e40af;
+      background: #1e40af;
     }
-    </style>
+  </style>
 </head>
 
 <body>
@@ -92,7 +92,23 @@ let lastY = 0
 let color = "#000000"
 let size = 2
 
-// UI controls
+// ---- LOAD EXISTING LOG ----
+fetch("http://localhost:5001/get-log")
+  .then(res => res.json())
+  .then(data => {
+    data.forEach(stroke => {
+      drawLine(
+        stroke.x1,
+        stroke.y1,
+        stroke.x2,
+        stroke.y2,
+        stroke.color || "#000",
+        stroke.size || 2
+      )
+    })
+  })
+
+// ---- UI CONTROLS ----
 document.getElementById("colorPicker").onchange = (e) => {
   color = e.target.value
 }
@@ -101,16 +117,19 @@ document.getElementById("brushSize").oninput = (e) => {
   size = e.target.value
 }
 
-// draw line
+// ---- DRAW FUNCTION ----
 function drawLine(x1, y1, x2, y2, color, size) {
   ctx.strokeStyle = color
   ctx.lineWidth = size
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
   ctx.beginPath()
   ctx.moveTo(x1, y1)
   ctx.lineTo(x2, y2)
   ctx.stroke()
 }
 
+// ---- MOUSE EVENTS ----
 canvas.addEventListener("mousedown", (e) => {
   drawing = true
   const rect = canvas.getBoundingClientRect()
@@ -145,13 +164,21 @@ canvas.addEventListener("mousemove", (e) => {
   lastY = y
 })
 
-// receive from backend
+// ---- RECEIVE FROM SERVER ----
 ws.onmessage = (event) => {
-  const { x1, y1, x2, y2, color, size } = JSON.parse(event.data)
-  drawLine(x1, y1, x2, y2, color, size)
+  const data = JSON.parse(event.data)
+
+  drawLine(
+    data.x1,
+    data.y1,
+    data.x2,
+    data.y2,
+    data.color || "#000",
+    data.size || 2
+  )
 }
 
-// clear canvas (local only for now)
+// ---- CLEAR (LOCAL ONLY) ----
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 }

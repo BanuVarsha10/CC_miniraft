@@ -24,7 +24,9 @@ let state = {
   currentTerm: 0,
   votedFor: null,
   role: "follower",
-  leaderId: null
+  leaderId: null,
+  log: [],            // ✅ FIXED
+  commitIndex: 0
 }
 
 let electionTimeout = null
@@ -114,6 +116,24 @@ app.post("/request-vote", (req, res) => {
   res.json({ voteGranted: false, term: state.currentTerm })
 })
 
+app.post("/replicate", (req, res) => {
+  const { stroke, term } = req.body
+
+  // reject old terms
+  if (term < state.currentTerm) {
+    return res.sendStatus(200)
+  }
+
+  // accept leader
+  state.currentTerm = term
+  state.role = "follower"
+
+  // store stroke
+  state.log.push(stroke)
+
+  res.sendStatus(200)
+})
+
 // ---- RPC: HEARTBEAT ----
 app.post("/heartbeat", (req, res) => {
   const { term, leaderId } = req.body
@@ -131,7 +151,19 @@ app.post("/heartbeat", (req, res) => {
   res.sendStatus(200)
 })
 
-// ---- DRAW ENDPOINT ----
+// ---- GET LOG (for frontend persistence) ----
+app.get("/get-log", (req, res) => {
+  res.json(state.log)
+})
+
+app.get("/status", (req, res) => {
+  res.json({
+    id: REPLICA_ID,
+    role: state.role,
+    term: state.currentTerm
+  })
+})
+
 app.post("/draw", async (req, res) => {
   if (state.role !== "leader") {
     return res.status(403).send("Not leader")
@@ -141,7 +173,18 @@ app.post("/draw", async (req, res) => {
 
   console.log(`Leader ${REPLICA_ID} got stroke:`, stroke)
 
-  // send to gateway for broadcast
+  // store locally
+  state.log.push(stroke)
+
+  // send to followers
+  await Promise.all(peers.map(peer => {
+    return axios.post(`${peer.url}/replicate`, {
+      stroke,
+      term: state.currentTerm
+    }).catch(() => {})
+  }))
+
+  // broadcast to clients
   try {
     await axios.post(`${GATEWAY_URL}/broadcast`, stroke)
   } catch (err) {
